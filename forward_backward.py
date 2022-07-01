@@ -6,7 +6,7 @@ import subprocess
 import argparse
 
 
-def forward_backward(vcf_file, bam_file, output_file, argref, argalt, validate, count_orphans, min_BQ):
+def forward_backward(vcf_file, bam_file, output_file, argref, argalt, validate, fasta_ref, count_orphans, min_BQ):
     #  header should be:
     #       chrom, pos, ref, alt, total_read, supported_forward, supported_reversed
     with open(output_file, 'w') as f:
@@ -60,11 +60,11 @@ def forward_backward(vcf_file, bam_file, output_file, argref, argalt, validate, 
         if validate:
             # this is the part to validate the res by samtools
             if not count_orphans:
-                cmd = 'samtools mpileup -f /diskmnt/Datasets_public/Reference/GRCh38.d1.vd1/GRCh38.d1.vd1.fa -s ' + \
-                      bam_file + ' -r chr1:' + str(pos) + '-' + str(pos) + ' -Q '+ str(min_BQ) +' | cut -f 1,2,3,4,5 '
+                cmd = 'samtools mpileup -f ' + fasta_ref + ' -s ' + bam_file + ' -r chr1:' + str(pos) + '-' + \
+                      str(pos) + ' -Q ' + str(min_BQ) + ' | cut -f 1,2,3,4,5 '
             else:
-                cmd = 'samtools mpileup -f /diskmnt/Datasets_public/Reference/GRCh38.d1.vd1/GRCh38.d1.vd1.fa -s ' + \
-                      bam_file + ' -r chr1:' + str(pos) + '-' + str(pos) + ' -Q '+ str(min_BQ) +' -A | cut -f 1,2,3,4,5 '
+                cmd = 'samtools mpileup -f ' + fasta_ref + ' -s ' + bam_file + ' -r chr1:' + str(pos) + '-' + \
+                      str(pos) + ' -Q ' + str(min_BQ) + ' -A | cut -f 1,2,3,4,5 '
             ps = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             output = ps.communicate()[0]
             res = output.decode('ascii').split('\n')[1]
@@ -115,6 +115,8 @@ if __name__ == '__main__':
                         help="alternative of the variant")
     parser.add_argument("-v", "--validate", dest="validate", default=False, action='store_true',
                         help="validate my result by samtools")
+    parser.add_argument("-f", "--fasta-ref", dest="fasta_ref", default=None,
+                        help="The faidx-indexed reference file in the FASTA format.Only needed when use -v")
     parser.add_argument("-A", "--count-orphans", dest="count_orphans", default=False, action='store_true',
                         help='Do not skip anomalous read pairs in variant calling.')
     parser.add_argument("-Q",  "--min-BQ", dest="min_BQ", type=int, default=0,
@@ -138,5 +140,6 @@ if __name__ == '__main__':
     # vcf_file = '/diskmnt/Projects/Users/chen.xiangyu/dash/0f45d954-d951-4927-a2ba-476e319a6a88/call' \
     #            '-snp_indel_proximity_filter/execution/output/ProximityFiltered.vcf'
     # bam_file = '/diskmnt/Projects/Users/chen.xiangyu/ffpe_analysis/bam_file/CTSP-AD3X.WGS.F.hg38/104214d9-0138-4eea-8330-6df0cfca32c4_wgs_gdc_realn.bam'
-    forward_backward(abs_path_vcf, abs_path_bam, abs_path_output, args.ref, args.alt, args.validate, args.count_orphans,
-                     args.min_BQ)
+    # fasta_ref = '/diskmnt/Datasets_public/Reference/GRCh38.d1.vd1/GRCh38.d1.vd1.fa'
+    forward_backward(abs_path_vcf, abs_path_bam, abs_path_output, args.ref, args.alt, args.validate, args.fasta_ref,
+                     args.count_orphans, args.min_BQ)
