@@ -41,7 +41,7 @@ def forward_backward(vcf_file, bam_file, output_file, argref, argalt, validate, 
                 for pileupread in pileupcolumn.pileups:
                     # query position is None if is_del or is_refskip is set
                     if pileupread.query_position is None:
-                        print(pileupread)
+                        # print(pileupread)
                         total += 1
                         continue
                     base = pileupread.alignment.query_sequence[pileupread.query_position]
