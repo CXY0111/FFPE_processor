@@ -4,102 +4,143 @@ import re
 import os
 import subprocess
 import argparse
+from utils import get_sam_results, exact_region
 
 
-def forward_backward(vcf_file, bam_file, output_file, argref, argalt, validate, fasta_ref, count_orphans, min_BQ):
+def forward_backward(vcf_file, bam_file, output_file, argref, argalt, validate, fasta_ref, count_orphans, min_BQ, region):
+    # generate the index file
+    pysam.tabix_index(
+        "/diskmnt/Projects/Users/chen.xiangyu/dash/0f45d954-d951-4927-a2ba-476e319a6a88/call"
+        "-snp_indel_proximity_filter/execution/output/ProximityFiltered.vcf",
+        preset="vcf", force=True, keep_original=True)
+
     #  header should be:
     #       chrom, pos, ref, alt, total_read, supported_forward, supported_reversed
     with open(output_file, 'w') as f:
         f.write("chrom\tpos\tref\talt\ttotal_read\tsupported_forward\tsupported_reversed\n")
 
     # open the vcf file and bam file
-    vcf_reader = vcf.Reader(open(vcf_file, 'r'))
+    vcf_reader = vcf.Reader(filename=vcf_file+'.gz')
     samfile = pysam.AlignmentFile(bam_file, "rb")
-    for record in vcf_reader:
-        chrom = record.CHROM
-        pos = record.POS
-        ref = record.REF
-        alt = record.ALT
 
-        # choose only SNP
-        if len(ref) != 1 or len(alt) != 1 or len(alt[0]) != 1:
-            continue
+    if region == 'all':                # iterate all the vcf file
+        for record in vcf_reader:
+            chrom = record.CHROM
+            pos = record.POS
+            ref = record.REF
+            alt = record.ALT
 
-        # choose variant only C to T
-        if ref != argref or alt[0] != argalt:
-            continue
+            # choose only SNP
+            if len(ref) != 1 or len(alt) != 1 or len(alt[0]) != 1:
+                continue
 
-        # print out the record
-        print('for', record, ':')
+            # choose variant only ref to alt
+            if ref != argref or alt[0] != argalt:
+                continue
 
-        forward_support, reverse_support = 0, 0
-        total = 0
+            # print out the record
+            print('for', record, ':')
 
-        # get the aligned base in a given position
-        for pileupcolumn in samfile.pileup(chrom, pos - 1, pos, min_base_quality=min_BQ, ignore_orphans=not count_orphans):
-            if pileupcolumn.pos == pos - 1:
-                for pileupread in pileupcolumn.pileups:
-                    # query position is None if is_del or is_refskip is set
-                    if pileupread.query_position is None:
-                        # print(pileupread)
-                        total += 1
-                        continue
-                    base = pileupread.alignment.query_sequence[pileupread.query_position]
-                    if base == alt[0]:
+            forward_support, reverse_support = 0, 0
+            reverse_all, forward_all = 0, 0
+            total = 0
+
+            # get the aligned base in a given position
+            for pileupcolumn in samfile.pileup(chrom, pos - 1, pos, min_base_quality=min_BQ,
+                                               ignore_orphans=not count_orphans):
+                if pileupcolumn.pos == pos - 1:
+                    for pileupread in pileupcolumn.pileups:
+                        # query position is None if is_del or is_refskip is set
+                        if pileupread.query_position is not None:
+                            base = pileupread.alignment.query_sequence[pileupread.query_position]
+                            if base == alt[0]:
+                                if pileupread.alignment.flag & 16:
+                                    reverse_support += 1
+                                else:
+                                    forward_support += 1
                         if pileupread.alignment.flag & 16:
-                            reverse_support += 1
+                            reverse_all += 1
                         else:
-                            forward_support += 1
+                            forward_all += 1
 
-                    total += 1
-        print('backward_suport=', reverse_support, 'forward_suport=', forward_support, 'total=', total)
-        with open(output_file, 'a') as f:
-            f.write(chrom + "\t" + str(pos) + "\t" + ref + "\t" + str(alt[0]) + "\t" + str(total) + "\t" + str(
-                forward_support) + "\t" + str(reverse_support) + "\n")
+                        total += 1
+            print('backward_suport=', reverse_support, 'forward_suport=', forward_support, 'reverse_all=', reverse_all,
+                  'forward_all=', forward_all, 'total=', total)
+            with open(output_file, 'a') as f:
+                f.write(chrom + "\t" + str(pos) + "\t" + ref + "\t" + str(alt[0]) + "\t" + str(total) + "\t" + str(
+                    forward_support) + "\t" + str(reverse_support) + "\n")
 
-        if validate:
             # this is the part to validate the res by samtools
-            if not count_orphans:
-                cmd = 'samtools mpileup -f ' + fasta_ref + ' -s ' + bam_file + ' -r chr1:' + str(pos) + '-' + \
-                      str(pos) + ' -Q ' + str(min_BQ) + ' | cut -f 1,2,3,4,5 '
-            else:
-                cmd = 'samtools mpileup -f ' + fasta_ref + ' -s ' + bam_file + ' -r chr1:' + str(pos) + '-' + \
-                      str(pos) + ' -Q ' + str(min_BQ) + ' -A | cut -f 1,2,3,4,5 '
-            ps = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            output = ps.communicate()[0]
-            res = output.decode('ascii').split('\n')[1]
-            result = res.split('\t')[4]
-
-            forward, backward, other = 0, 0, 0
-
-            # get rid of inserts and deletes
-            new_res = ''
-            i = 0
-            while i < len(result):
-                if result[i] == '+' or result[i] == '-':
-                    if 48 <= ord(result[i + 1]) <= 57:
-                        i += int(result[i + 1]) + 1
+            if validate:
+                res, sam_forward_support, sam_reverse_support, sam_forward, sam_reverse, sam_total = get_sam_results(
+                    fasta_ref, bam_file, pos, alt, count_orphans, min_BQ)
+                print('samtools_mpileup:')
+                if sam_reverse_support == reverse_support and sam_forward_support == forward_support and total == sam_total and reverse_all == sam_reverse and forward_all == sam_forward and total == sam_total:
+                    print(res, 'matches!')
                 else:
-                    new_res += result[i]
-                i += 1
-            # get rid of begining and ending character
-            new_res = re.sub("\^.|\$", '', new_res)
+                    print(res, 'not match')
 
-            for s in new_res:
+            print('')
+    else:                              # iterate only the selected region
+        chrom, start, end = exact_region(region)
+        for record in vcf_reader.fetch(chrom, start, end):
+            chrom = record.CHROM
+            pos = record.POS
+            ref = record.REF
+            alt = record.ALT
 
-                if s == str(alt[0]):
-                    forward += 1
-                elif s == str(alt[0]).lower():
-                    backward += 1
-                elif s == ',' or 97 <= ord(s) <= 122 or s == '.' or 65 <= ord(s) <= 90 or s == '*':
-                    other += 1
-            print('samtools_mpileup:')
-            if backward == reverse_support and forward == forward_support and total == forward + backward + other:
-                print(res, 'matches!')
-            else:
-                print(res, 'not match')
+            # choose only SNP
+            if len(ref) != 1 or len(alt) != 1 or len(alt[0]) != 1:
+                continue
 
-        print('')
+            # choose variant only ref to alt
+            if ref != argref or alt[0] != argalt:
+                continue
+
+            # print out the record
+            print('for', record, ':')
+
+            forward_support, reverse_support = 0, 0
+            reverse_all, forward_all = 0, 0
+            total = 0
+
+            # get the aligned base in a given position
+            for pileupcolumn in samfile.pileup(chrom, pos - 1, pos, min_base_quality=min_BQ,
+                                               ignore_orphans=not count_orphans):
+                if pileupcolumn.pos == pos - 1:
+                    for pileupread in pileupcolumn.pileups:
+                        # query position is None if is_del or is_refskip is set
+                        if pileupread.query_position is not None:
+                            base = pileupread.alignment.query_sequence[pileupread.query_position]
+                            if base == alt[0]:
+                                if pileupread.alignment.flag & 16:
+                                    reverse_support += 1
+                                else:
+                                    forward_support += 1
+                        if pileupread.alignment.flag & 16:
+                            reverse_all += 1
+                        else:
+                            forward_all += 1
+
+                        total += 1
+            print('backward_suport=', reverse_support, 'forward_suport=', forward_support, 'reverse_all=', reverse_all,
+                  'forward_all=', forward_all, 'total=', total)
+            with open(output_file, 'a') as f:
+                f.write(chrom + "\t" + str(pos) + "\t" + ref + "\t" + str(alt[0]) + "\t" + str(total) + "\t" + str(
+                    forward_support) + "\t" + str(reverse_support) + "\n")
+
+            # this is the part to validate the res by samtools
+            if validate:
+                res, sam_forward_support, sam_reverse_support, sam_forward, sam_reverse, sam_total = get_sam_results(
+                    fasta_ref, bam_file, chrom, pos, alt, count_orphans, min_BQ)
+                print('samtools_mpileup:')
+                if sam_reverse_support == reverse_support and sam_forward_support == forward_support and total == sam_total and reverse_all == sam_reverse and forward_all == sam_forward and total == sam_total:
+                    print(res, 'matches!')
+                else:
+                    print(res, 'not match')
+
+            print('')
+
 
 
 if __name__ == '__main__':
@@ -119,8 +160,10 @@ if __name__ == '__main__':
                         help="The faidx-indexed reference file in the FASTA format.Only needed when use -v")
     parser.add_argument("-A", "--count-orphans", dest="count_orphans", default=False, action='store_true',
                         help='Do not skip anomalous read pairs in variant calling.')
-    parser.add_argument("-Q",  "--min-BQ", dest="min_BQ", type=int, default=0,
-                        help='Minimum base quality for a base to be considered' )
+    parser.add_argument("-Q", "--min-BQ", dest="min_BQ", type=int, default=0,
+                        help='Minimum base quality for a base to be considered')
+    parser.add_argument("-R", "--region", dest="region", type=str, default='all',
+                        help='Only generate results in region. If no specify, process all the vcf file.')
 
     args = parser.parse_args()
 
@@ -136,10 +179,11 @@ if __name__ == '__main__':
     print("Validate by samtools or not: {}".format(args.validate))
     print("count-orphans: {}".format(args.count_orphans))
     print("min-BQ: {}".format(args.min_BQ))
+    print("region: {}".format(args.region))
 
     # vcf_file = '/diskmnt/Projects/Users/chen.xiangyu/dash/0f45d954-d951-4927-a2ba-476e319a6a88/call' \
     #            '-snp_indel_proximity_filter/execution/output/ProximityFiltered.vcf'
     # bam_file = '/diskmnt/Projects/Users/chen.xiangyu/ffpe_analysis/bam_file/CTSP-AD3X.WGS.F.hg38/104214d9-0138-4eea-8330-6df0cfca32c4_wgs_gdc_realn.bam'
     # fasta_ref = '/diskmnt/Datasets_public/Reference/GRCh38.d1.vd1/GRCh38.d1.vd1.fa'
     forward_backward(abs_path_vcf, abs_path_bam, abs_path_output, args.ref, args.alt, args.validate, args.fasta_ref,
-                     args.count_orphans, args.min_BQ)
+                     args.count_orphans, args.min_BQ,args.region)

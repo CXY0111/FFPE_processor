@@ -31,7 +31,9 @@ python forward_backward.py -i /diskmnt/Projects/Users/chen.xiangyu/dash/0f45d954
 ***-o,--output*** STR output file name  
 ***-r,--ref*** STR reference of the variant, default to be 'C', choose from ['A', 'T', 'C', 'G']    
 ***-a,--alt*** STR alternative of the variant, default to be 'T', choose from ['A', 'T', 'C', 'G']  
-***-v,--validate*** validate my result by samtools,default to be False
-***-a,--count-orphans*** Do not skip anomalous read pairs in variant calling,default to be False    
-***-Q,--min-BQ*** INT Minimum base quality for a base to be considered,default to be 0
+***-v,--validate*** validate my result by samtools,default to be False  
+***-f,--fasta-ref***STR The faidx-indexed reference file in the FASTA format.Only needed when use -v    
+***-A,--count-orphans*** skip anomalous read pairs in variant calling,default to be False    
+***-Q,--min-BQ*** INT Minimum base quality for a base to be considered,default to be 0  
+***-R,--region*** STR Only generate results in region, default to be 'all'. 
 
