@@ -1,0 +1,2 @@
+chrom	pos	ref	alt	total_read	total_forward	total_reversed	supported_forward	supported_reversed
+chr1	739024	C	T	46	23	23	3	3
