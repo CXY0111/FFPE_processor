@@ -9,10 +9,7 @@ from utils import get_sam_results, exact_region
 
 def forward_backward(vcf_file, bam_file, output_file, argref, argalt, validate, fasta_ref, count_orphans, min_BQ, region):
     # generate the index file
-    pysam.tabix_index(
-        "/diskmnt/Projects/Users/chen.xiangyu/dash/0f45d954-d951-4927-a2ba-476e319a6a88/call"
-        "-snp_indel_proximity_filter/execution/output/ProximityFiltered.vcf",
-        preset="vcf", force=True, keep_original=True)
+    pysam.tabix_index(vcf_file,preset="vcf", force=True, keep_original=True)
 
     #  header should be:
     #       chrom, pos, ref, alt, total_read, total_forward, total_reversed, supported_forward, supported_reversed
