@@ -24,6 +24,24 @@ source activate ffpe
 python forward_backward.py -i /diskmnt/Projects/Users/chen.xiangyu/dash/0f45d954-d951-4927-a2ba-476e319a6a88/call-snp_indel_proximity_filter/execution/output/ProximityFiltered.vcf -b /diskmnt/Projects/Users/chen.xiangyu/ffpe_analysis/bam_file/CTSP-AD3X.WGS.F.hg38/104214d9-0138-4eea-8330-6df0cfca32c4_wgs_gdc_realn.bam -o output.txt
 ```
 
+### on computer1
+1. git the code from github
+```
+git clone https://github.com/Brave-banana/FFPE_processor.git && cd FFPE_processor
+```
+2. Set the `LSF_DOCKER_VOLUMES` environment variable to mount the location of  files
+```
+export LSF_DOCKER_VOLUMES="/storage1/fs1/m.wyczalkowski/:/storage1/fs1/m.wyczalkowski/ /storage1/fs1/dinglab/Active/Projects/:/storage1/fs1/dinglab/Active/Projects/"
+```
+3. submit through `bsub` (Notice that this step should under directory `FFPE_processor`)
+```
+bsub -Is -q general-interactive -a 'docker(bravebanana/ffpe_processor)' /bin/bash
+```
+4. Run FFPE_processor
+```
+python forward_backward.py -i /storage1/fs1/m.wyczalkowski/Active/cromwell-data/cromwell-workdir/cromwell-executions/tindaisy2.ffpe.cwl/0f45d954-d951-4927-a2ba-476e319a6a88/call-snp_indel_proximity_filter/execution/output/ProximityFiltered.vcf -b /storage1/fs1/dinglab/Active/Projects/CTSP-DLBCL/primary/AWG/WGS/534d8f65-e46e-44ec-82ed-f15192b1517d/104214d9-0138-4eea-8330-6df0cfca32c4_wgs_gdc_realn.bam -o output.txt
+```
+
 ### Options
 
 ***-i,--input*** STR input vcf file name    
