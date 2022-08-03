@@ -2,7 +2,7 @@ import subprocess
 import re
 
 
-def get_sam_results(fasta_ref, bam_file, chrom, pos, alt, count_orphans, min_BQ):
+def get_sam_results(fasta_ref, bam_file, chrom, pos, alt, count_orphans, min_BQ, min_MQ, max_depth,ignore_overlaps):
     """
     this is the part to validate the res by samtools
 
@@ -15,12 +15,19 @@ def get_sam_results(fasta_ref, bam_file, chrom, pos, alt, count_orphans, min_BQ)
     :return: res, forward_support, reverse_support, forward, reverse, total
     :rtype: multiple
     """
-    if not count_orphans:
-        cmd = 'samtools mpileup -f ' + fasta_ref + ' -s ' + bam_file + ' -r ' + chrom + ':' + str(pos) + '-' + \
-              str(pos) + ' -Q ' + str(min_BQ) + ' --reverse-del | cut -f 1,2,3,4,5 '
-    else:
-        cmd = 'samtools mpileup -f ' + fasta_ref + ' -s ' + bam_file + ' -r ' + chrom + ':' + str(pos) + '-' + \
-              str(pos) + ' -Q ' + str(min_BQ) + ' -A --reverse-del | cut -f 1,2,3,4,5 '
+    # if not count_orphans:
+    #     cmd = 'samtools mpileup -f ' + fasta_ref + ' -s ' + bam_file + ' -r ' + chrom + ':' + str(pos) + '-' + \
+    #           str(pos) + ' -Q ' + str(min_BQ) + ' --reverse-del -B | cut -f 1,2,3,4,5 '
+    # else:
+    #     cmd = 'samtools mpileup -f ' + fasta_ref + ' -s ' + bam_file + ' -r ' + chrom + ':' + str(pos) + '-' + \
+    #           str(pos) + ' -Q ' + str(min_BQ) + ' -A --reverse-del -B | cut -f 1,2,3,4,5 '
+    # # print(cmd)
+    cmd = 'samtools mpileup -f ' + fasta_ref + ' -s ' + bam_file + ' -r ' + chrom + ':' + str(pos) + '-' + str(pos) + ' -Q ' + str(min_BQ) + ' --reverse-del -B -d ' + str(max_depth) + ' -q ' + str(min_MQ)
+    if count_orphans:
+        cmd += ' -A'
+    if not ignore_overlaps:
+        cmd += ' -x'
+    cmd += ' | cut -f 1,2,3,4,5 '
     # print(cmd)
     ps = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     output = ps.communicate()[0]
@@ -31,18 +38,21 @@ def get_sam_results(fasta_ref, bam_file, chrom, pos, alt, count_orphans, min_BQ)
     forward, reverse = 0, 0
     total = 0
 
+    # get rid of begining and ending character
+    result = re.sub("\^.|\$", '', result)
+
     # get rid of inserts and deletes
     new_res = ''
     i = 0
     while i < len(result):
         if result[i] == '+' or result[i] == '-':
-            if 48 <= ord(result[i + 1]) <= 57:
-                i += int(result[i + 1]) + 1
+            num = re.match('[0-9]+', result[i + 1:]).group(0)
+            i += int(num) + len(num)
         else:
             new_res += result[i]
         i += 1
-    # get rid of begining and ending character
-    new_res = re.sub("\^.|\$", '', new_res)
+    # # get rid of begining and ending character
+    # new_res = re.sub("\^.|\$", '', new_res)
 
     for s in new_res:
 

@@ -50,8 +50,14 @@ python forward_backward.py -i /storage1/fs1/m.wyczalkowski/Active/cromwell-data/
 ***-r,--ref*** STR reference of the variant, default to be 'C', choose from ['A', 'T', 'C', 'G']    
 ***-a,--alt*** STR alternative of the variant, default to be 'T', choose from ['A', 'T', 'C', 'G']  
 ***-v,--validate*** validate my result by samtools,default to be False  
-***-f,--fasta-ref***STR The faidx-indexed reference file in the FASTA format.Only needed when use -v    
+***-f,--fasta-ref***STR The faidx-indexed reference file in the FASTA format.Only needed when use -v  
+***-R,--region*** STR Only generate results in region, default to be 'all'.    
+
+***The following options are the same as in pysam/samtools***   
 ***-A,--count-orphans*** skip anomalous read pairs in variant calling,default to be False    
 ***-Q,--min-BQ*** INT Minimum base quality for a base to be considered,default to be 0  
-***-R,--region*** STR Only generate results in region, default to be 'all'. 
+***-q,--min-MQ*** INT Minimum mapping quality for an alignment to be used, default to be 0  
+***-d,--max-depth*** INT At a position, read maximally INT reads per input file.    
+***-x,--ignore-overlaps*** Disable read-pair overlap detection.
+
 

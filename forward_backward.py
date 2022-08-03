@@ -7,7 +7,7 @@ import argparse
 from utils import get_sam_results, exact_region
 
 
-def forward_backward(vcf_file, bam_file, output_file, argref, argalt, validate, fasta_ref, count_orphans, min_BQ, region):
+def forward_backward(vcf_file, bam_file, output_file, argref, argalt, validate, fasta_ref, region, count_orphans, min_BQ, min_MQ, max_depth, ignore_overlaps):
     # generate the index file
     pysam.tabix_index(vcf_file,preset="vcf", force=True, keep_original=True)
 
@@ -31,9 +31,17 @@ def forward_backward(vcf_file, bam_file, output_file, argref, argalt, validate, 
             if len(ref) != 1 or len(alt) != 1 or len(alt[0]) != 1:
                 continue
 
-            # choose variant only ref to alt
-            if ref != argref or alt[0] != argalt:
+            # when argref == *, choose all variants. Or, only choose ref == argref
+            if argref != '*' and ref != argref:
                 continue
+
+            # when argalt == *, choose all variants. Or, only choose alt == argalt
+            if argalt != '*' and alt != argalt:
+                continue
+
+            # # choose variant only ref to alt
+            # if ref != argref or alt[0] != argalt:
+            #     continue
 
             # print out the record
             print('for', record, ':')
@@ -43,8 +51,8 @@ def forward_backward(vcf_file, bam_file, output_file, argref, argalt, validate, 
             total = 0
 
             # get the aligned base in a given position
-            for pileupcolumn in samfile.pileup(chrom, pos - 1, pos, min_base_quality=min_BQ,
-                                               ignore_orphans=not count_orphans):
+            for pileupcolumn in samfile.pileup(chrom, pos - 1, pos, min_base_quality=min_BQ, min_mapping_quality=min_MQ,
+                                               ignore_orphans=not count_orphans,max_depth=max_depth, ignore_overlaps=ignore_overlaps):
                 if pileupcolumn.pos == pos - 1:
                     for pileupread in pileupcolumn.pileups:
                         # query position is None if is_del or is_refskip is set
@@ -69,16 +77,18 @@ def forward_backward(vcf_file, bam_file, output_file, argref, argalt, validate, 
                         str(reverse_support) + "\n")
 
             # this is the part to validate the res by samtools
-            if validate:
+            if validate and total > 0:
                 res, sam_forward_support, sam_reverse_support, sam_forward, sam_reverse, sam_total = get_sam_results(
-                    fasta_ref, bam_file, pos, alt, count_orphans, min_BQ)
+                    fasta_ref, bam_file ,chrom, pos, alt, count_orphans, min_BQ, min_MQ, max_depth,ignore_overlaps)
                 print('samtools_mpileup:')
                 if sam_reverse_support == reverse_support and sam_forward_support == forward_support and total == sam_total and reverse_all == sam_reverse and forward_all == sam_forward and total == sam_total:
                     print(res, 'matches!')
                 else:
                     print(res, 'not match')
+                    os._exit(0)
 
-            print('')
+            # print('')
+        print('all correct')
     else:                              # iterate only the selected region
         chrom, start, end = exact_region(region)
         for record in vcf_reader.fetch(chrom, start, end):
@@ -91,9 +101,17 @@ def forward_backward(vcf_file, bam_file, output_file, argref, argalt, validate, 
             if len(ref) != 1 or len(alt) != 1 or len(alt[0]) != 1:
                 continue
 
-            # choose variant only ref to alt
-            if ref != argref or alt[0] != argalt:
+            # when argref == *, choose all variants. Or, only choose ref == argref
+            if argref != '*' and ref != argref:
                 continue
+
+            # when argalt == *, choose all variants. Or, only choose alt == argalt
+            if argalt != '*' and alt != argalt:
+                continue
+
+            # # choose variant only ref to alt
+            # if ref != argref or alt[0] != argalt:
+            #     continue
 
             # print out the record
             print('for', record, ':')
@@ -103,11 +121,14 @@ def forward_backward(vcf_file, bam_file, output_file, argref, argalt, validate, 
             total = 0
 
             # get the aligned base in a given position
-            for pileupcolumn in samfile.pileup(chrom, pos - 1, pos, min_base_quality=min_BQ,
-                                               ignore_orphans=not count_orphans):
+            for pileupcolumn in samfile.pileup(chrom, pos - 1, pos, min_base_quality=min_BQ, min_mapping_quality=min_MQ,
+                                               ignore_orphans=not count_orphans, max_depth=max_depth,ignore_overlaps=ignore_overlaps):
                 if pileupcolumn.pos == pos - 1:
+                    # print(pileupcolumn.get_query_qualities())
                     for pileupread in pileupcolumn.pileups:
                         # query position is None if is_del or is_refskip is set
+                        # print(pileupread.alignment)
+                        # print('')
                         if pileupread.query_position is not None:
                             base = pileupread.alignment.query_sequence[pileupread.query_position]
                             if base == alt[0]:
@@ -129,16 +150,16 @@ def forward_backward(vcf_file, bam_file, output_file, argref, argalt, validate, 
                         str(reverse_support) + "\n")
 
             # this is the part to validate the res by samtools
-            if validate:
+            if validate and total > 0:
                 res, sam_forward_support, sam_reverse_support, sam_forward, sam_reverse, sam_total = get_sam_results(
-                    fasta_ref, bam_file, chrom, pos, alt, count_orphans, min_BQ)
+                    fasta_ref, bam_file, chrom, pos, alt, count_orphans, min_BQ, min_MQ, max_depth,ignore_overlaps)
                 print('samtools_mpileup:')
                 if sam_reverse_support == reverse_support and sam_forward_support == forward_support and total == sam_total and reverse_all == sam_reverse and forward_all == sam_forward and total == sam_total:
                     print(res, 'matches!')
                 else:
                     print(res, 'not match')
 
-            print('')
+            # print('')
 
 
 
@@ -149,20 +170,27 @@ if __name__ == '__main__':
     parser.add_argument("-i", "--input", type=str, dest="vcf_file", help="input vcf file name")
     parser.add_argument("-b", "--bam", type=str, dest="bam_file", help="input bam file name")
     parser.add_argument("-o", "--output", type=str, dest="output_file", help="output file name")
-    parser.add_argument("-r", "--ref", type=str, default='C', dest="ref", choices=['A', 'T', 'C', 'G'],
+    parser.add_argument("-r", "--ref", type=str, default='*', dest="ref", choices=['A', 'T', 'C', 'G'],
                         help="reference of the variant")
-    parser.add_argument("-a", "--alt", type=str, default='T', dest="alt", choices=['A', 'T', 'C', 'G'],
+    parser.add_argument("-a", "--alt", type=str, default='*', dest="alt", choices=['A', 'T', 'C', 'G'],
                         help="alternative of the variant")
     parser.add_argument("-v", "--validate", dest="validate", default=False, action='store_true',
                         help="validate my result by samtools")
     parser.add_argument("-f", "--fasta-ref", dest="fasta_ref", default=None,
                         help="The faidx-indexed reference file in the FASTA format.Only needed when use -v")
-    parser.add_argument("-A", "--count-orphans", dest="count_orphans", default=False, action='store_true',
-                        help='Do not skip anomalous read pairs in variant calling.')
-    parser.add_argument("-Q", "--min-BQ", dest="min_BQ", type=int, default=0,
-                        help='Minimum base quality for a base to be considered')
     parser.add_argument("-R", "--region", dest="region", type=str, default='all',
-                        help='Only generate results in region. If no specify, process all the vcf file.')
+                        help="Only generate results in region. If no specify, process all the vcf file.")
+    # supporting some options in pysam/samtools, the following options are the same meaning as in pysam/samtools
+    parser.add_argument("-A", "--count-orphans", dest="count_orphans", default=False, action='store_true',
+                        help="Do not skip anomalous read pairs in variant calling.")
+    parser.add_argument("-Q", "--min-BQ", dest="min_BQ", type=int, default=0,
+                        help="Minimum base quality for a base to be considered")
+    parser.add_argument("-q","--min-MQ",dest="min_MQ", type=int, default=0,
+                        help="Minimum mapping quality for an alignment to be used")
+    parser.add_argument("-d","--max-depth",dest="max_depth",type=int,default=8000,
+                        help="At a position, read maximally INT reads per input file.")
+    parser.add_argument("-x", "--ignore-overlaps", dest="ignore_overlaps", default=True, action='store_false',
+                        help="Disable read-pair overlap detection.")
 
     args = parser.parse_args()
 
@@ -176,13 +204,15 @@ if __name__ == '__main__':
     print("Reference: {}".format(args.ref))
     print("Alternative: {}".format(args.alt))
     print("Validate by samtools or not: {}".format(args.validate))
+    print("region: {}".format(args.region))
+
     print("count-orphans: {}".format(args.count_orphans))
     print("min-BQ: {}".format(args.min_BQ))
-    print("region: {}".format(args.region))
+    print("min-MQ: {}".format(args.min_MQ))
 
     # vcf_file = '/diskmnt/Projects/Users/chen.xiangyu/dash/0f45d954-d951-4927-a2ba-476e319a6a88/call' \
     #            '-snp_indel_proximity_filter/execution/output/ProximityFiltered.vcf'
     # bam_file = '/diskmnt/Projects/Users/chen.xiangyu/ffpe_analysis/bam_file/CTSP-AD3X.WGS.F.hg38/104214d9-0138-4eea-8330-6df0cfca32c4_wgs_gdc_realn.bam'
     # fasta_ref = '/diskmnt/Datasets_public/Reference/GRCh38.d1.vd1/GRCh38.d1.vd1.fa'
     forward_backward(abs_path_vcf, abs_path_bam, abs_path_output, args.ref, args.alt, args.validate, args.fasta_ref,
-                     args.count_orphans, args.min_BQ,args.region)
+                     args.region, args.count_orphans, args.min_BQ, args.min_MQ, args.max_depth,args.ignore_overlaps)
