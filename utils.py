@@ -22,7 +22,7 @@ def get_sam_results(fasta_ref, bam_file, chrom, pos, alt, count_orphans, min_BQ,
     #     cmd = 'samtools mpileup -f ' + fasta_ref + ' -s ' + bam_file + ' -r ' + chrom + ':' + str(pos) + '-' + \
     #           str(pos) + ' -Q ' + str(min_BQ) + ' -A --reverse-del -B | cut -f 1,2,3,4,5 '
     # # print(cmd)
-    cmd = 'samtools mpileup -f ' + fasta_ref + ' -s ' + bam_file + ' -r ' + chrom + ':' + str(pos) + '-' + str(pos) + ' -Q ' + str(min_BQ) + ' --reverse-del -B -d ' + str(max_depth) + ' -q ' + str(min_MQ)
+    cmd = '/usr/src/samtools/bin/samtools mpileup -f ' + fasta_ref + ' -s ' + bam_file + ' -r ' + chrom + ':' + str(pos) + '-' + str(pos) + ' -Q ' + str(min_BQ) + ' --reverse-del -B -d ' + str(max_depth) + ' -q ' + str(min_MQ)
     if count_orphans:
         cmd += ' -A'
     if not ignore_overlaps:
